@@ -1,0 +1,127 @@
+import math
+
+# Constants (Input Parameters)
+'''L = 6000 mm; UDL = 40 KN/m; B=300 mm; D = 400 mm; CC = 30 mm; Deff = 370 mm;  Fck=25 Mpa; Fy = 500 Mpa;  Support_width = 300 KN/mm2; Dia_C = 20 mm; Dia_T =20 mm; Dia_s = 10 mm '''
+L = int(input("Clear sapan in mm:")) # Clear span in mm
+UDL = int(input("Uniformly distributed load in KN/m:")) # Uniformly distributed load in kN/m including self weight
+B = int(input("Width of the beam in mm:")) # Width of the beam in mm
+D = int(input("Depth of the beam in mm:")) # Total depth of the beam in mm
+CC = int(input("Clear cover in mm:")) # Clear cover in mm
+Deff = int(input("Effective depth in mm:")) # Effective depth in mm
+Fck = int(input("Concrete compressive strength in MPa (M25):")) # Concrete compressive strength in MPa (M25)
+Fy = int(input("Steel yield strength in MPa (Fe500):")) # Steel yield strength in MPa (Fe500)
+Support_width = int(input("Support width:")) #Support width of beam
+Dia_C = int(input("Diameter of the compression Reinforcement in mmm:")) # Diameter of the compression Reinforcement in mm
+Dia_T = int(input("Diameter of the tension Reinforcement in mm:")) # Diameter of the tension Reinforcement in mm
+Dia_S = int(input("Diameter of the shear Reinforcement:")) # Diameter of the shear Reinforcement in mm
+pi = 3.14
+
+# 1. Effective span of the beam (L_eff)
+L_eff_1 = L + Deff
+L_eff_2 = L + Support_width / 2 + Support_width / 2
+L_eff = min(L_eff_1, L_eff_2) / 1000  # Taking the minimum and converting to meters
+print(f"Effective span (L_eff): {L_eff:.2f} m")
+
+# 2. Flexural Design
+Wu = 1.5 * UDL  # Ultimate load in kN/m
+Mu = (Wu * L_eff ** 2) / 8  # Ultimate/Bending moment in kNm
+
+if Fy == 250:
+    Xu_max_d = 0.53
+elif Fy == 415:
+    Xu_max_d = 0.48
+elif Fy == 500:
+    Xu_max_d = 0.46
+else:
+    Xu_max_d = 0
+    
+Mu_lim = 0.36 * Xu_max_d * (1 - 0.42 * Xu_max_d) * B * Deff**2 * Fck * 10**-6  # Limiting moment (Mu_lim)
+print(f"Factored load (Wu): {Wu:.2f} kN/m")
+print(f"Factored moment (Mu): {Mu:.2f} kNm")
+print(f"Limiting moment (Mu_lim): {Mu_lim:.2f} kNm")
+
+if Mu > Mu_lim:
+    print("The beam requires a doubly reinforced design")
+else:
+    print("The beam is designed as a singly reinforced beam")
+
+'2(a). Compression Steel area'
+a = CC / Deff   # 
+'''(SP.16;pg.no:13;Table F)
+    0.05 --------------------> 424
+    0.10 --------------------> 412'''
+R1 = 0.05; fsc1 = 424; R2 = 0.10; fsc2 = 412
+Fsc = R1 - ((R1 - R2) / (fsc2 - fsc1)) * (a - R1)  # Interpolated (Fsc) value
+Asc = (Mu * (10**6) - Mu_lim * (10**6)) / (Fsc * (Deff - CC))
+asc = (pi / 4) * (Dia_C**2)
+No_of_bars_C = math.ceil(Asc / asc)
+print(f"compression area of steel (Asc): {Asc:.2f} kN/m")
+print(f"Number of Compression Bars: {No_of_bars_C:.2f} kN/m")
+
+'2(b). Tension Steel area'
+Ast1 = ((0.5*Fck)/Fy)*(1-(math.sqrt(1-4.6*Mu_lim/(Fck*B*Deff**2))))*B*Deff*10**6
+Ast2 = (Mu-Mu_lim) / (0.87 * Fy * (Deff-CC))*10**6
+Ast = Ast1 + Ast2
+ast = (pi * Dia_T**2) / 4
+No_of_bars_T = math.ceil(Ast / ast)
+print(f"Tension area of steel (Ast): {Ast:.2f} kN/m")
+print(f"Number of Tension Bars: {No_of_bars_T:.2f} kN/m")
+
+'3. check for Shear'
+V_u = (Wu * L_eff) / 2  # Shear force KN
+P_T = ((Ast)/(B*Deff))*100  #  percentage of tensile reinforcement 
+T_v = V_u*10**3 / (B * Deff)  # Nominal shear stress (tau_v) N/mm²
+print(f"Factored shear force (Vu) = {V_u:.2f} kN")
+print(f"percentage of tensile reinforcement (P_T) = {P_T:.2f} kN")
+print(f"Nominal shear stress (T_v) = {T_v:.2f} N/mm²")
+''' for design Shear Strength of concrete T_c from (IS 456-200;Pg.no.:73;Table:19
+    prectage of steel is 1.74 and M25 so
+    1.50 ---------------------->  0.74
+    1.75 ---------------------->  0.78'''
+# Tc values are based on Pt and interpolated
+Pt1 = 1.50; Pt2 = 1.75; Tc1 = 0.74; Tc2 = 0.78
+T_c = Tc1 + ((Tc2 - Tc1) / (Pt2 - Pt1)) * (P_T - Pt1)  # Shear strength of concrete
+if T_v > T_c:
+    print("SHEAR REINFORCEMENT REQUIRED")
+else:
+    Vu_c = (T_c * B * Deff) / 1000  # Shear carried by concrete
+    Vu_s = V_u - Vu_c  # Shear carried by steel
+    Asv = (2 * (math.pi / 4) * (Dia_S ** 2))  # Area of shear reinforcement
+    Sv1 = (0.87 * Fy * Asv * Deff) / (Vu_s * 1000)  # Spacing
+    Sv2 = 0.75 * Deff
+    Sv3 = 300  # mm
+    Sv = min(Sv1, Sv2, Sv3)
+    print(f"Provide {DSR}mm 2-legged stirrups at {Sv}mm c/c")
+
+'4. Development Length (IS 456-2000;Pg.no.:42; clause: 26.2.1)'
+'''Return the design bond stress based on the concrete grade (fck) as per IS 456 Table 21 '''
+if Fck <= 20:
+    k = 1.2  # N/mm² for M20
+elif Fck <= 25:
+    k = 1.4  # N/mm² for M25
+elif Fck <= 30:
+    k = 1.5  # N/mm² for M30
+elif Fck <= 35:
+    k = 1.7  # N/mm² for M35
+else:
+    k = 1.9  # N/mm² for M40 and abo
+Db = 20 #  Nominal diameter of the bar (in mm)
+T_bd= k*1.6
+L_d = (0.87*Fy*Db)/(4*T_bd)
+print(f" Development Length L_d= {L_d:.2f} mm")
+
+'5.Deflection Check'
+'5(a). Short-term Deflection'
+I = (B*D**3)/12  # Moment of inertia in mm^4
+E = 5000*(math.sqrt(Fck)) 
+delta_short = (5*UDL*(L**4)) / (384*E*I)  # Short-term deflection in mm
+delta_long = 1.5 * delta_short  # Long-term deflection (factor 1.5 for creep)
+print(f" Short-term deflection (delta_short) = {delta_short:.2f} mm")
+print(f" Long-term deflection (delta_short) = {delta_long:.2f} mm")
+
+'6.Crack width  (IS 456-2000 pg.no.:93)'
+F_s = (Mu*10**6 / ((B * Deff ** 2) / 6))  # Calculated stress in steel (MPa)
+w = (3 * Deff * F_s) / (2 * 10 ** 5)  # Crack width in mm
+print (f" Calculated stress in steel  (F_S) = {F_s:.2f} Mpa")
+print (f" Short-term deflection (w) = {w:.2f} mm")
+
